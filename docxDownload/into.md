@@ -19,12 +19,13 @@ Office居然不能打开代码是html的docx， 如果更改后缀名为html就�
       
 >   使用第二种方式遇到的问题：
 
-这个模式支持WPS和office，但处理的结果中图片的宽度和直通横线宽度不一致。前端的横线是字符串，所以样式仅仅在这一块有问题。
+这个模式支持WPS和office，但处理的结果中图片的宽度和直通横线宽度不一致。前端的横线是字符串，所以样式仅仅在这一块有问题。图片本身的渲染在不同的设备上渲染的大小不一致，导致文档图片显示的有问题
 
 ## 4、解决办法：
 第一种方式废弃
 使用第二种方式，由于html和xml的语法不一致， 只需要在前端让横线宽度变长，溢出隐藏，而生成的docx的横线字符串添加的刚刚好，就没问题了。
 局限性就是需要手动比对字符串距离，而且文档的宽度不能变化，如果变化就会需要手动调整横线的宽度。
+图片本身的生成与可视区域，设备像素比有关，以及canvas的宽度有关，调整三者直接的比值，进而可以确定实际需要的大小。
 
 ## 5、具体实现：
 
@@ -33,6 +34,35 @@ Office居然不能打开代码是html的docx， 如果更改后缀名为html就�
     import htmlDocx from 'html-docx-js/dist/html-docx'
     import saveAs from 'file-saver'
 ```
+
+>  图片大小转化， 适配各种屏幕大小
+```
+ resizedataURL(datas, canvasWidth, canvasHeight) {
+      const targetWidth = 2560
+
+      let clientWidth = document.body.clientWidth // 可视窗口大小，与浏览器拉伸有关
+
+      let rate = targetWidth / clientWidth / window.devicePixelRatio 
+      devicePixelRatio // 物理像素和设备独立像素之间的比率， 每英寸渲染的像素点
+
+      let wantedWidth = canvasWidth * rate
+      let wantedHeight = canvasHeight * rate
+      return new Promise(async function (resolve, reject) {
+        var img = document.createElement('img')
+        img.onload = function () {
+          var canvas = document.createElement('canvas')
+          var ctx = canvas.getContext('2d')
+          canvas.width = wantedWidth
+          canvas.height = wantedHeight
+          ctx.drawImage(this, 0, 0, wantedWidth, wantedHeight)
+          var dataURI = canvas.toDataURL()
+          resolve(dataURI)
+        }
+        img.src = datas
+      })
+    },
+```
+
 >   canvas转变成base64  
 ```
     let dom = this.$refs.exportdom
@@ -40,14 +70,16 @@ Office居然不能打开代码是html的docx， 如果更改后缀名为html就�
       // 遍历图表，转换为 base64 静态图片
       if (this.canvases.length) {
         this.canvases.forEach((canvas, i) => {
-          // let echart = canvas.getContext('2d');
-          let url = canvas.toDataURL()
-          let img = document.createElement('img')
-          img.src = url
-          img.style.width = '100%'
-          img.style.height = '100%'
-          canvas.parentNode.parentNode.style.display = 'none'
-          canvas.parentNode.parentNode.parentNode.appendChild(img)
+          this.resizedataURL(canvas.toDataURL(), canvas.width, canvas.height).then((res) => {
+            let url = res
+            // let url = canvas.toDataURL()
+            let img = document.createElement('img')
+            img.src = url
+            img.style.width = '100%'
+            img.style.height = '100%'
+            canvas.parentNode.parentNode.style.display = 'none'
+            canvas.parentNode.parentNode.parentNode.appendChild(img)
+          })
         })
       }
 ```
